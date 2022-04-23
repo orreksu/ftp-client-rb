@@ -1,0 +1,146 @@
+#!/usr/bin/env ruby
+
+require 'uri'
+require 'pathname'
+require './ftp'
+
+args = ARGV
+
+# list files at given FTP URL
+def ls(url)
+  FTP.open(url, &:list)
+end
+
+# create a new directory at given FTP URL
+def mkdir(url)
+  FTP.open(url) do |ftp|
+    ftp.mkd
+  end
+end
+
+# remove empty directory at given FTP URL
+def rmdir(url)
+  FTP.open(url) do |ftp|
+    ftp.rmd
+  end
+end
+
+# remove file at given FTP URL
+def rm(url)
+  FTP.open(url) do |ftp|
+  ftp.dele
+  end
+end
+
+# copy file from URL/PATH to PATH/URL
+def cp(from, to)
+  if URI.parse(from).kind_of?(URI::FTP)
+    cp_from_url(from, to)
+  else
+    cp_from_path(from, to)
+  end
+end
+
+# copy file from URL to local PATH
+def cp_from_url(from_url, to_path)
+  abort 'ERROR: URL is wrong' unless URI.parse(from_url).kind_of?(URI::FTP)
+  abort 'ERROR: PATH already exists' if Pathname.new(to_path).exist?
+
+  FTP.open(from_url) do |ftp|
+    data = ftp.retr
+    File.open(to_path, 'w') do |f|
+      f.write(data)
+    end
+  end
+end
+
+# copy file from local PATH to URL
+def cp_from_path(from_path, to_url)
+  abort 'ERROR: URL is wrong' unless URI.parse(to_url).kind_of?(URI::FTP)
+  abort 'ERROR: PATH does not exist' unless Pathname.new(from_path).exist?
+
+  FTP.open(to_url) do |ftp|
+    File.open(from_path) do |f|
+      data = f.read
+      ftp.stor(data)
+    end
+  end
+end
+
+# move file from URL/PATH to PATH/URL
+def mv(from, to)
+  if URI.parse(from).kind_of?(URI::FTP)
+    mv_from_url(from, to)
+  else
+    mv_from_path(from, to)
+  end
+end
+
+# move file from URL to local PATH
+def mv_from_url(from_url, to_path)
+  abort 'ERROR: URL is wrong' unless URI.parse(from_url).kind_of?(URI::FTP)
+  abort 'ERROR: PATH already exists' if Pathname.new(to_path).exist?
+  
+  FTP.open(from_url) do |ftp|
+    data = ftp.retr
+    ftp.dele
+    File.open(to_path, 'w') do |f|
+      f.write(data)
+    end
+  end
+end
+
+# move file from local PATH to URL
+def mv_from_path(from_path, to_url)
+  abort 'ERROR: URL is wrong' unless URI.parse(to_url).kind_of?(URI::FTP)
+  abort 'ERROR: PATH does not exist' unless Pathname.new(from_path).exist?
+
+  FTP.open(to_url) do |ftp|
+    File.open(from_path) do |f|
+      data = f.read
+      ftp.stor(data)
+    end
+    Pathname.new(from_path).delete()
+  end
+end
+
+# parse arguments by macthing the command
+cmd = args.shift
+case cmd
+when 'ls'
+  url = args.shift
+  abort 'ERROR: URL is not given' if url.nil?
+  ls(url)
+
+when 'mkdir'
+  url = args.shift
+  abort 'ERROR: URL is not given' if url.nil?
+  mkdir(url)
+
+when 'rmdir'
+  url = args.shift
+  abort 'ERROR: URL is not given' if url.nil?
+  rmdir(url) 
+
+when 'rm'
+  url = args.shift
+  abort 'ERROR: URL is not given' if url.nil?
+  rm(url)
+
+when 'cp'
+  from = args.shift
+  abort 'ERROR: FROM is not given' if from.nil?
+  to = args.shift
+  abort 'ERROR: TO is not given' if to.nil?
+  cp(from, to)
+
+when 'mv'
+  from = args.shift
+  abort 'ERROR: ARG1 is not given' if from.nil?
+  to = args.shift
+  abort 'ERROR: ARG2 is not given' if to.nil?
+  mv(from, to)
+
+else
+  abort 'ERROR: CMD is not recognized'
+end
